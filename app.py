@@ -80,47 +80,12 @@ def get_screenshot(url, selectors_to_hide, width=1440, credentials=None):
             # Navigate to URL
             page.goto(url, wait_until='networkidle', timeout=60000)
             
-            # Wait for all images to load
-            page.evaluate("""
-                () => {
-                    return Promise.all(
-                        Array.from(document.images)
-                            .filter(img => !img.complete)
-                            .map(img => new Promise(resolve => {
-                                img.onload = img.onerror = resolve;
-                            }))
-                    );
-                }
-            """)
-            
-            # Additional wait for lazy-loaded images (scroll to trigger loading)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.wait_for_timeout(500)
-            page.evaluate("window.scrollTo(0, 0)")
-            page.wait_for_timeout(300)
-            
-            # Final check: wait for all images again after scroll
-            page.evaluate("""
-                () => {
-                    return Promise.all(
-                        Array.from(document.images)
-                            .filter(img => !img.complete)
-                            .map(img => new Promise(resolve => {
-                                img.onload = img.onerror = resolve;
-                            }))
-                    );
-                }
-            """)
-            
             # Inject CSS to hide selectors
             if selectors_to_hide:
                 selectors_list = [s.strip() for s in selectors_to_hide.split(',') if s.strip()]
                 if selectors_list:
                     css = ", ".join(selectors_list) + " { display: none !important; }"
                     page.add_style_tag(content=css)
-            
-            # Small delay to ensure CSS is applied
-            page.wait_for_timeout(200)
             
             # Take full page screenshot
             screenshot_bytes = page.screenshot(full_page=True)
