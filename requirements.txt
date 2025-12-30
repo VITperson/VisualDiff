@@ -1,0 +1,6 @@
+streamlit
+playwright
+openai
+pandas
+python-dotenv
+Pillow
