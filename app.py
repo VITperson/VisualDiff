@@ -46,7 +46,27 @@ def get_screenshot(url, selectors_to_hide, width=1440, credentials=None):
     """Captures a full-page screenshot after hiding specific selectors at a given width."""
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            # Try system Chromium first (for Streamlit Cloud), then fallback to Playwright's
+            chromium_paths = [
+                "/usr/bin/chromium",           # Streamlit Cloud / Linux
+                "/usr/bin/chromium-browser",   # Alternative Linux path
+                "/usr/bin/google-chrome",      # Google Chrome on Linux
+                None                            # Playwright's bundled browser (local dev)
+            ]
+            
+            browser = None
+            for chrome_path in chromium_paths:
+                try:
+                    if chrome_path:
+                        browser = p.chromium.launch(headless=True, executable_path=chrome_path)
+                    else:
+                        browser = p.chromium.launch(headless=True)
+                    break
+                except Exception:
+                    continue
+            
+            if not browser:
+                return None, "Could not launch any browser"
             
             # Setup context with high-res viewport and optional credentials
             # Height is set to 1080 initially, but we take full_page=True anyway
