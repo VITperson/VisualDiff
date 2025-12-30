@@ -364,19 +364,6 @@ def analyze_images(img_bytes_prod, img_bytes_test, api_key, model_name="gpt-4o")
 with st.sidebar:
     st.header("Configuration")
     
-    use_ai = st.checkbox("Enable AI Analysis", value=False, help="Use GPT to identify bugs automatically. Requires OpenAI API Key.")
-    
-    api_key = None
-    model_name = "gpt-4o"
-    
-    if use_ai:
-        api_key = st.text_input("OpenAI API Key", type="password", value=os.getenv("OPENAI_API_KEY", ""))
-        model_name = st.selectbox("OpenAI Model", 
-                               options=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4.1"], 
-                                   index=0, 
-                                   help="Model to use for vision analysis.")
-    
-    st.markdown("---")
     st.subheader("Viewport Configuration")
     selected_widths = st.multiselect("Select Widths (px)", 
                                     options=[1440, 1024, 768, 375], 
@@ -402,10 +389,22 @@ with st.sidebar:
             st.rerun()
     else:
         start_button = st.button("Start Comparison")
+    
+    # AI Analysis section at the bottom
+    st.markdown("---")
+    with st.expander("🤖 AI Analysis (Optional)"):
+        use_ai = st.checkbox("Enable AI Analysis", value=False, help="Use GPT to identify bugs automatically.")
+        api_key = None
+        model_name = "gpt-4o"
+        if use_ai:
+            api_key = st.text_input("OpenAI API Key", type="password", value=os.getenv("OPENAI_API_KEY", ""))
+            model_name = st.selectbox("OpenAI Model", 
+                                   options=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"], 
+                                       index=0)
 
 # --- Main Area ---
-st.title("Visual Regression AI-QA")
-st.markdown("Automate visual testing for website migrations using GPT-4o Vision.")
+st.title("🔍 VisualDiff")
+st.markdown("Compare production and test pages side-by-side. Capture full-page screenshots and spot visual differences instantly.")
 
 # Initialize session state for results
 if 'results' not in st.session_state:
