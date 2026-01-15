@@ -58,7 +58,11 @@ def get_screenshot(url, selectors_to_hide, width=1440, credentials=None):
             for chrome_path in chromium_paths:
                 try:
                     if chrome_path:
-                        browser = p.chromium.launch(headless=True, executable_path=chrome_path)
+                        browser = p.chromium.launch(
+                            headless=True, 
+                            executable_path=chrome_path,
+                            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                        )
                     else:
                         browser = p.chromium.launch(headless=True)
                     break
@@ -70,7 +74,10 @@ def get_screenshot(url, selectors_to_hide, width=1440, credentials=None):
             
             # Setup context with high-res viewport and optional credentials
             # Height is set to 1080 initially, but we take full_page=True anyway
-            context_args = {'viewport': {'width': width, 'height': 1080}}
+            context_args = {
+                'viewport': {'width': width, 'height': 1080},
+                'ignore_https_errors': True
+            }
             if credentials and credentials.get("username") and credentials.get("password"):
                 context_args['http_credentials'] = credentials
                 
@@ -377,8 +384,8 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Test Env Credentials")
     st.caption("Optional: Use if your test environment is behind Basic Auth.")
-    test_user = st.text_input("Test Username", value="")
-    test_pass = st.text_input("Test Password", type="password", value="")
+    test_user = st.text_input("Test Username", value="", help="User for Basic Auth").strip()
+    test_pass = st.text_input("Test Password", type="password", value="", help="Password for Basic Auth").strip()
     
     st.markdown("---")
     uploaded_file = st.file_uploader("Upload CSV (prod_url, test_url)", type=["csv"])
@@ -463,8 +470,10 @@ if st.session_state.is_running:
                         """)
                         progress_bar.progress(progress_percentage)
                         
-                        # Prepare credentials if provided
-                        test_creds = {"username": test_user, "password": test_pass} if test_user and test_pass else None
+                        # Prepare credentials if provided (strip just in case)
+                        test_creds = None
+                        if test_user and test_pass:
+                            test_creds = {"username": test_user, "password": test_pass}
                         
                         # Capture Screenshots
                         prod_img, prod_err = get_screenshot(prod_url, selectors_to_hide, width=width)
