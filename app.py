@@ -170,13 +170,18 @@ def get_report_file_info(res):
     os.makedirs(width_dir, exist_ok=True)
     
     # 3. Clean path for filename
-    parsed = urlparse(res['test_url'])
+    target_url = res.get('test_url') or res.get('url')
+    parsed = urlparse(target_url)
     # Remove leading/trailing slashes and replace others with underscores
     path_clean = parsed.path.strip("/").replace("/", "_")
     if not path_clean:
         path_clean = "root"
-    
-    filename = f"{path_clean}_report_{res['width']}px.html"
+
+    if res.get('mode') == 'screenshot':
+        filename = f"{path_clean}_screenshot_{res['width']}px.html"
+    else:
+        filename = f"{path_clean}_report_{res['width']}px.html"
+
     full_path = os.path.join(width_dir, filename)
     
     return full_path, filename
@@ -188,18 +193,25 @@ def create_reports_archive(results):
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for res in results:
-            if not res.get('prod_err') and not res.get('test_err'):
+            # For compare mode, errors are stored as prod_err/test_err.
+            # For screenshot-only, we store err in 'err' and keep prod_err/test_err empty.
+            if not res.get('prod_err') and not res.get('test_err') and not res.get('err'):
                 # Generate HTML content
-                report_html = generate_comparison_html(res)
-                
-                # Create path structure inside zip: width/filename.html
-                parsed = urlparse(res['test_url'])
-                path_clean = parsed.path.strip("/").replace("/", "_")
-                if not path_clean:
-                    path_clean = "root"
-                
-                filename = f"{res['width']}px/{path_clean}_report_{res['width']}px.html"
-                
+                if res.get('mode') == 'screenshot':
+                    report_html = generate_screenshot_only_html(res)
+                    parsed = urlparse(res['url'])
+                    path_clean = parsed.path.strip("/").replace("/", "_")
+                    if not path_clean:
+                        path_clean = "root"
+                    filename = f"{res['width']}px/{path_clean}_screenshot_{res['width']}px.html"
+                else:
+                    report_html = generate_comparison_html(res)
+                    parsed = urlparse(res['test_url'])
+                    path_clean = parsed.path.strip("/").replace("/", "_")
+                    if not path_clean:
+                        path_clean = "root"
+                    filename = f"{res['width']}px/{path_clean}_report_{res['width']}px.html"
+
                 # Add to zip
                 zip_file.writestr(filename, report_html)
     
@@ -239,7 +251,6 @@ def generate_comparison_html(res):
                 border-bottom-left-radius: 12px;
                 border-bottom-right-radius: 12px;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-                /* CRITICAL: No overflow:hidden here for sticky to work */
             }}
             .header {{
                 position: -webkit-sticky;
@@ -256,7 +267,6 @@ def generate_comparison_html(res):
             }}
             .prod-header {{ background: rgba(255, 75, 75, 0.95); }}
             .test-header {{ background: rgba(0, 102, 204, 0.95); }}
-            
             .header a {{ 
                 color: white; 
                 text-decoration: none; 
@@ -271,10 +281,7 @@ def generate_comparison_html(res):
                 white-space: nowrap;
             }}
             .header a:hover {{ text-decoration: underline; opacity: 1; }}
-            img {{ 
-                width: 100%; 
-                display: block; 
-            }}
+            img {{ width: 100%; display: block; }}
             .label {{ 
                 font-size: 10px; 
                 opacity: 0.8; 
@@ -282,23 +289,9 @@ def generate_comparison_html(res):
                 letter-spacing: 1.5px; 
                 margin-bottom: 2px;
             }}
-            .toolbar {{
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: rgba(0,0,0,0.7);
-                color: white;
-                padding: 8px 16px;
-                border-radius: 20px;
-                font-size: 11px;
-                z-index: 2000;
-                pointer-events: none;
-                backdrop-filter: blur(4px);
-            }}
         </style>
     </head>
     <body>
-        <div class="toolbar">QA Magic Tool • Headers are locked to top</div>
         <div class="container">
             <div class="column">
                 <div class="header prod-header">
@@ -314,6 +307,85 @@ def generate_comparison_html(res):
                 </div>
                 <img src="data:image/png;base64,{test_b64}">
             </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def generate_screenshot_only_html(res):
+    """Generates a standalone HTML string for a single URL screenshot with sticky header."""
+    img_b64 = encode_image(res['img'])
+    url = res['url']
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang=\"en\">
+    <head>
+        <meta charset=\"UTF-8\">
+        <title>QA Screenshot: #{res['index']}</title>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0 20px 20px 20px;
+                font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;
+                background-color: #f0f2f6;
+                color: #333;
+            }}
+            .wrap {{
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                overflow: hidden;
+            }}
+            .header {{
+                position: -webkit-sticky;
+                position: sticky;
+                top: 0;
+                z-index: 1000;
+                background: rgba(0, 102, 204, 0.95);
+                color: white;
+                padding: 14px 20px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                font-weight: 700;
+                font-size: 14px;
+                backdrop-filter: blur(5px);
+                -webkit-backdrop-filter: blur(5px);
+            }}
+            .label {{
+                font-size: 10px;
+                opacity: 0.8;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                margin-bottom: 2px;
+            }}
+            .header a {{
+                color: white;
+                text-decoration: none;
+                display: block;
+                margin-top: 4px;
+                font-weight: 400;
+                opacity: 0.95;
+                font-size: 13px;
+                word-break: break-all;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }}
+            .header a:hover {{ text-decoration: underline; opacity: 1; }}
+            img {{ width: 100%; display: block; }}
+        </style>
+    </head>
+    <body>
+        <div class=\"wrap\">
+            <div class=\"header\">
+                <div class=\"label\">Screenshot</div>
+                <a href=\"{url}\" target=\"_blank\">{url}</a>
+            </div>
+            <img src=\"data:image/png;base64,{img_b64}\">
         </div>
     </body>
     </html>
@@ -388,14 +460,25 @@ with st.sidebar:
     test_pass = st.text_input("Test Password", type="password", value="", help="Password for Basic Auth").strip()
     
     st.markdown("---")
-    uploaded_file = st.file_uploader("Upload CSV (prod_url, test_url)", type=["csv"])
+    st.subheader("Run Mode")
+    run_mode = st.radio(
+        "Choose mode",
+        options=["Compare (prod vs test)", "Screenshots only (single list)"],
+        index=0,
+        help="Compare requires prod_url + test_url. Screenshots-only accepts a single column (with header or without) and produces HTML reports per URL."
+    )
+
+    st.markdown("---")
+    uploader_label = "Upload CSV (prod_url, test_url)" if run_mode.startswith("Compare") else "Upload CSV (url list: header optional)"
+    uploaded_file = st.file_uploader(uploader_label, type=["csv"])
     
     if st.session_state.is_running:
-        if st.button("Stop Regression"):
+        if st.button("Stop Run"):
             st.session_state.is_running = False
             st.rerun()
     else:
-        start_button = st.button("Start Comparison")
+        start_label = "Start Comparison" if run_mode.startswith("Compare") else "Start Screenshots"
+        start_button = st.button(start_label)
     
     # AI Analysis section at the bottom
     st.markdown("---")
@@ -432,31 +515,78 @@ if st.session_state.is_running:
     try:
         # We need to re-read the file since we reran
         if uploaded_file is not None:
-            df = pd.read_csv(uploaded_file)
-            if 'prod_url' not in df.columns or 'test_url' not in df.columns:
-                st.error("CSV must contain 'prod_url' and 'test_url' columns.")
-                st.session_state.is_running = False
-            else:
-                st.session_state.results = [] # Clear previous results
-                st.session_state.current_index = 0
-                
-                total_urls = len(df)
-                total_ops = total_urls * len(selected_widths)
-                current_op = 0
-                
-                progress_bar = st.progress(0)
-                progress_status = st.empty()
-                
-                for index, row in df.iterrows():
-                    if not st.session_state.is_running:
-                        break
-                    
-                    prod_url = row['prod_url']
-                    test_url = row['test_url']
-                    
-                    for width in selected_widths:
+            # Read bytes once so we can re-parse reliably on reruns
+            csv_bytes = uploaded_file.getvalue()
+
+            def parse_urls_single_list(data: bytes):
+                """Parse a CSV that may have a header or not, and may use column name 'url' or a single unnamed column."""
+                # Attempt 1: header auto
+                try:
+                    df1 = pd.read_csv(io.BytesIO(data))
+                except Exception:
+                    df1 = pd.DataFrame()
+
+                urls = []
+                if not df1.empty:
+                    if 'url' in df1.columns:
+                        urls = df1['url'].tolist()
+                    elif 'test_url' in df1.columns and 'prod_url' not in df1.columns:
+                        # Sometimes people will upload a single-column file but keep the old name
+                        urls = df1['test_url'].tolist()
+                    elif df1.shape[1] == 1:
+                        urls = df1.iloc[:, 0].tolist()
+
+                # Detect the "first URL became header" case → retry with header=None
+                if not urls:
+                    try:
+                        df2 = pd.read_csv(io.BytesIO(data), header=None)
+                        if df2.shape[1] >= 1:
+                            urls = df2.iloc[:, 0].tolist()
+                    except Exception:
+                        urls = []
+
+                # Clean
+                cleaned = []
+                for u in urls:
+                    if pd.isna(u):
+                        continue
+                    u = str(u).strip()
+                    if not u:
+                        continue
+                    cleaned.append(u)
+                return cleaned
+
+            # Prepare credentials if provided (strip just in case)
+            test_creds = None
+            if test_user and test_pass:
+                test_creds = {"username": test_user, "password": test_pass}
+
+            st.session_state.results = []  # Clear previous results
+            st.session_state.current_index = 0
+
+            if run_mode.startswith("Compare"):
+                df = pd.read_csv(io.BytesIO(csv_bytes))
+                if 'prod_url' not in df.columns or 'test_url' not in df.columns:
+                    st.error("CSV must contain 'prod_url' and 'test_url' columns for Compare mode.")
+                    st.session_state.is_running = False
+                else:
+                    total_urls = len(df)
+                    total_ops = total_urls * len(selected_widths)
+                    current_op = 0
+
+                    progress_bar = st.progress(0)
+                    progress_status = st.empty()
+
+                    for index, row in df.iterrows():
                         if not st.session_state.is_running:
                             break
+
+                        prod_url = str(row['prod_url']).strip()
+                        test_url = str(row['test_url']).strip()
+
+                        for width in selected_widths:
+                            if not st.session_state.is_running:
+                                break
                         
                         current_op += 1
                         progress_percentage = current_op / total_ops
@@ -470,16 +600,12 @@ if st.session_state.is_running:
                         """)
                         progress_bar.progress(progress_percentage)
                         
-                        # Prepare credentials if provided (strip just in case)
-                        test_creds = None
-                        if test_user and test_pass:
-                            test_creds = {"username": test_user, "password": test_pass}
-                        
                         # Capture Screenshots
                         prod_img, prod_err = get_screenshot(prod_url, selectors_to_hide, width=width)
                         test_img, test_err = get_screenshot(test_url, selectors_to_hide, width=width, credentials=test_creds)
                         
                         res_item = {
+                            "mode": "compare",
                             "index": index + 1,
                             "width": width,
                             "prod_url": prod_url,
@@ -504,6 +630,62 @@ if st.session_state.is_running:
                 st.session_state.is_running = False
                 
                 st.success("Comparison completed! Use the sidebar to navigate results.")
+
+            else:
+                # --- Screenshots-only mode ---
+                urls = parse_urls_single_list(csv_bytes)
+                if not urls:
+                    st.error("CSV must contain a single column of URLs (header optional). Example: a column named 'url' or just one column.")
+                    st.session_state.is_running = False
+                else:
+                    total_urls = len(urls)
+                    total_ops = total_urls * len(selected_widths)
+                    current_op = 0
+
+                    progress_bar = st.progress(0)
+                    progress_status = st.empty()
+
+                    for idx, url in enumerate(urls):
+                        if not st.session_state.is_running:
+                            break
+
+                        for width in selected_widths:
+                            if not st.session_state.is_running:
+                                break
+
+                            current_op += 1
+                            progress_percentage = current_op / total_ops
+
+                            progress_status.markdown(f"""
+                            **Progress:** {current_op} / {total_ops} operations completed
+                            *   **Current URL:** {idx + 1} of {total_urls}
+                            *   **Current Viewport:** `{width}px`
+                            *   **Processing:** `{url}`
+                            """)
+                            progress_bar.progress(progress_percentage)
+
+                            img, err = get_screenshot(url, selectors_to_hide, width=width, credentials=test_creds)
+
+                            res_item = {
+                                "mode": "screenshot",
+                                "index": idx + 1,
+                                "width": width,
+                                "url": url,
+                                "img": img,
+                                "err": err,
+                                # Keep keys for compatibility with the rest of the UI
+                                "prod_err": None,
+                                "test_err": None,
+                                "ai_result": None,
+                            }
+                            st.session_state.results.append(res_item)
+
+                    progress_status.empty()
+                    progress_bar.empty()
+                    st.session_state.is_running = False
+
+                    st.success("Screenshots completed! Use the sidebar to navigate results.")
+
         else:
             st.session_state.is_running = False
                 
@@ -516,7 +698,12 @@ if st.session_state.results:
     st.markdown("---")
     
     # Create navigation labels with width
-    nav_options = [f"#{r['index']} [{r['width']}px]: {r['test_url'].split('/')[-1] or r['test_url']}" for r in st.session_state.results]
+    def _nav_label(r):
+        target = r.get('test_url') or r.get('url')
+        tail = target.split('/')[-1] if target else ""
+        return f"#{r['index']} [{r['width']}px]: {tail or target}"
+
+    nav_options = [_nav_label(r) for r in st.session_state.results]
     
     with st.sidebar:
         st.markdown("---")
@@ -535,7 +722,7 @@ if st.session_state.results:
             use_container_width=True
         )
 
-        selected_nav = st.radio("Select Pair", nav_options, index=st.session_state.current_index)
+        selected_nav = st.radio("Select Result", nav_options, index=st.session_state.current_index)
         st.session_state.current_index = nav_options.index(selected_nav)
 
     # Display selected result
@@ -543,9 +730,10 @@ if st.session_state.results:
     
     st.header(f"Result #{res['index']}")
     
-    if res['prod_err'] or res['test_err']:
-        if res['prod_err']: st.error(f"Prod Error: {res['prod_err']}")
-        if res['test_err']: st.error(f"Test Error: {res['test_err']}")
+    if res.get('err') or res.get('prod_err') or res.get('test_err'):
+        if res.get('err'): st.error(f"Error: {res['err']}")
+        if res.get('prod_err'): st.error(f"Prod Error: {res['prod_err']}")
+        if res.get('test_err'): st.error(f"Test Error: {res['test_err']}")
     else:
         # Get path and filename using the new helper
         report_path, report_filename = get_report_file_info(res)
@@ -559,7 +747,7 @@ if st.session_state.results:
         """, unsafe_allow_html=True)
         
         # Download single report button
-        report_html = generate_comparison_html(res)
+        report_html = generate_screenshot_only_html(res) if res.get('mode') == 'screenshot' else generate_comparison_html(res)
         st.download_button(
             label="📄 Download This Report",
             data=report_html,
@@ -595,14 +783,28 @@ if st.session_state.results:
             st.info("AI Analysis was disabled for this run.")
 
 elif uploaded_file is None:
-        st.info("Upload a CSV with `prod_url` and `test_url` columns to begin.")
+        st.info("Upload a CSV to begin.")
         
-        # Example CSV help
         st.markdown("""
-        **Example CSV Structure:**
+        **Compare mode (prod vs test):**
         ```csv
         prod_url,test_url
         https://example.com/page1,https://test.example.com/page1
         https://example.com/page2,https://test.example.com/page2
+        ```
+
+        **Screenshots-only mode (single list):**
+
+        With header:
+        ```csv
+        url
+        https://test.example.com/page1
+        https://test.example.com/page2
+        ```
+
+        Without header:
+        ```csv
+        https://test.example.com/page1
+        https://test.example.com/page2
         ```
         """)
