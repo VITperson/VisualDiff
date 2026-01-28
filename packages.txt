@@ -1,2 +1,7 @@
 chromium
 chromium-driver
+
+# Fonts for CJK (Chinese/Japanese/Korean) so headless Chromium renders glyphs (no "tofu" squares)
+fonts-noto-cjk
+fonts-noto-cjk-extra
+fonts-noto-color-emoji
