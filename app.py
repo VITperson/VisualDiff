@@ -44,6 +44,21 @@ import streamlit.components.v1 as components
 
 def get_screenshot(url, selectors_to_hide, width=1440, credentials=None):
     """Captures a full-page screenshot after hiding specific selectors at a given width."""
+    # Defensive URL validation: Streamlit/CSV parsing can yield NaN/None.
+    try:
+        import math
+        if url is None:
+            return None, "URL is empty"
+        if isinstance(url, float) and math.isnan(url):
+            return None, "URL is empty (NaN)"
+        if not isinstance(url, str):
+            url = str(url)
+        url = url.strip()
+        if not url or url.lower() == "nan":
+            return None, "URL is empty"
+    except Exception:
+        return None, "URL is invalid"
+
     try:
         with sync_playwright() as p:
             # Try system Chromium first (for Streamlit Cloud), then fallback to Playwright's
@@ -581,8 +596,18 @@ if st.session_state.is_running:
                         if not st.session_state.is_running:
                             break
 
-                        prod_url = str(row['prod_url']).strip()
-                        test_url = str(row['test_url']).strip()
+                        prod_url = row['prod_url']
+                        test_url = row['test_url']
+
+                        # Skip rows with missing URLs
+                        if pd.isna(prod_url) or pd.isna(test_url):
+                            continue
+
+                        prod_url = str(prod_url).strip()
+                        test_url = str(test_url).strip()
+
+                        if not prod_url or prod_url.lower() == "nan" or not test_url or test_url.lower() == "nan":
+                            continue
 
                         for width in selected_widths:
                             if not st.session_state.is_running:
